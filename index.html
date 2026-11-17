@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scanner QR Natal RBK 2026</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      margin: 0;
+      padding: 20px;
+      text-align: center;
+    }
+    .container {
+      background: white;
+      max-width: 430px;
+      margin: 25px auto;
+      padding: 22px;
+      border-radius: 16px;
+      box-shadow: 0 3px 12px #ddd;
+    }
+    h2 { color: #174b35; }
+    button {
+      background: #087443;
+      color: white;
+      border: 0;
+      padding: 15px;
+      border-radius: 10px;
+      width: 100%;
+      font-size: 17px;
+      margin: 10px 0;
+      cursor: pointer;
+    }
+    #reader { width: 100%; margin: 15px auto; }
+    #result {
+      padding: 15px;
+      margin-top: 15px;
+      border-radius: 10px;
+      background: #eee;
+      text-align: left;
+      min-height: 50px;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🎄 NATAL RBK 2026</h2>
+    <p>Sistem Check-in Jemaat</p>
+
+    <button id="startBtn" onclick="startScanner()">
+      MULAI SCAN QR
+    </button>
+
+    <div id="reader"></div>
+    <div id="result">Scanner siap digunakan.</div>
+  </div>
+
+<script>
+const API_URL =
+"https://script.google.com/macros/s/AKfycbzmLUw1euHlUGOY4NtaSRLkqWYY-59cgrzuuEbS3zhpM_XWW69OnwYGvq9IbH5PrvoVtw/exec";
+
+let scanner = null;
+let processing = false;
+
+function showResult(message) {
+  document.getElementById("result").textContent = message;
+}
+
+function startScanner() {
+  if (!window.isSecureContext) {
+    showResult("Kamera memerlukan koneksi HTTPS.");
+    return;
+  }
+
+  if (!navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia) {
+    showResult("Browser tidak mendukung akses kamera.");
+    return;
+  }
+
+  if (!scanner) {
+    scanner = new Html5Qrcode("reader");
+  }
+
+  document.getElementById("startBtn").disabled = true;
+  showResult("Meminta izin kamera...");
+
+  scanner.start(
+    { facingMode: "environment" },
+    { fps: 10, qrbox: { width: 250, height: 250 } },
+    onScanSuccess
+  ).then(() => {
+    showResult("Kamera aktif. Arahkan ke QR jemaat.");
+  }).catch(error => {
+    document.getElementById("startBtn").disabled = false;
+    showResult("Kamera gagal dibuka: " + error);
+  });
+}
+
+function onScanSuccess(decodedText) {
+  if (processing) return;
+  processing = true;
+
+  scanner.stop().then(() => {
+    checkIn(decodedText.trim());
+  }).catch(() => {
+    checkIn(decodedText.trim());
+  });
+}
+
+function checkIn(token) {
+  showResult("Memeriksa QR dan database...");
+
+  const callbackName =
+    "qrCallback_" + Date.now();
+
+  const script = document.createElement("script");
+  const params = new URLSearchParams({
+    token: token,
+    callback: callbackName
+  });
+
+  let finished = false;
+
+  window[callbackName] = function(data) {
+    finished = true;
+    showResult(data.message || "Tidak ada respons.");
+
+    delete window[callbackName];
+    script.remove();
+
+    document.getElementById("startBtn").disabled = false;
+    processing = false;
+  };
+
+  script.onerror = function() {
+    if (finished) return;
+    showResult("Gagal menghubungi server. Periksa koneksi.");
+    cleanup();
+  };
+
+  function cleanup() {
+    delete window[callbackName];
+    script.remove();
+    document.getElementById("startBtn").disabled = false;
+    processing = false;
+  }
+
+  script.src = API_URL + "?" + params.toString();
+  document.body.appendChild(script);
+
+  setTimeout(() => {
+    if (!finished) {
+      showResult("Server tidak merespons. Coba lagi.");
+      cleanup();
+    }
+  }, 15000);
+}
+</script>
+</body>
+</html>
+
